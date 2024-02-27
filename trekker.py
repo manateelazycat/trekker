@@ -23,7 +23,7 @@ import threading
 import traceback
 import sys
 from epc.server import ThreadingEPCServer
-from utils import (init_epc_client, eval_in_emacs, logger, close_epc_client, PostGui)
+from utils import (init_epc_client, eval_in_emacs, logger, close_epc_client)
 
 class Trekker:
     def __init__(self, args):
@@ -68,14 +68,15 @@ class Trekker:
         except:
             logger.error(traceback.format_exc())
 
-    @PostGui()
     def kill_buffer(self, buffer_id):
         pass
 
-    @PostGui()
     def update_views(self, args):
         ''' Update views.'''
-        print("***** ", args)
+        print("***** {}".format(args))
+
+    def kill_emacs(self):
+        pass
 
     def cleanup(self):
         """Do some cleanup before exit python process."""

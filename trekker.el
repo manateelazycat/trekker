@@ -366,6 +366,10 @@ manually. See `trekker-bind-key' for customization of app bindings."
   (add-hook 'kill-buffer-hook #'trekker--monitor-buffer-kill nil t)
   (add-hook 'kill-emacs-hook #'trekker--monitor-emacs-kill))
 
+(defun trekker--monitor-emacs-kill ()
+  "Function monitoring when Emacs is killed."
+  (trekker-call-async "kill_emacs"))
+
 (defun trekker--called-from-wsl-on-windows-p ()
   "Check whether trekker is called by Emacs on WSL and is running on Windows."
   (and (eq system-type 'gnu/linux)

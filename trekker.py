@@ -72,6 +72,11 @@ class Trekker:
     def kill_buffer(self, buffer_id):
         pass
 
+    @PostGui()
+    def update_views(self, args):
+        ''' Update views.'''
+        print("***** ", args)
+
     def cleanup(self):
         """Do some cleanup before exit python process."""
         close_epc_client()

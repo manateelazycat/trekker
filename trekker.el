@@ -271,6 +271,22 @@ Turn off this option will improve TREKKER new page creation speed."
 (defcustom trekker-frame-title-format frame-title-format
   "`frame-title-format' used by trekker-mode.")
 
+(defvar trekker--monitor-configuration-p t
+  "When this variable is non-nil, `trekker-monitor-configuration-change' executes.
+This variable is used to open buffer in backend and avoid graphics blink.
+
+TREKKER call python method `new_buffer' to create TREKKER application buffer.
+TREKKER call python method `update_views' to create TREKKER application view.
+
+Python process only create application view when Emacs window or buffer state change.")
+
+(defvar trekker-fullscreen-p nil
+  "When non-nil, TREKKER will intelligently hide modeline as necessray.")
+
+(defvar trekker-last-frame-width 0)
+
+(defvar trekker-last-frame-height 0)
+
 (defvar-local trekker--buffer-map-alist nil
   "TREKKER buffer-local map alist.")
 
@@ -304,6 +320,17 @@ Turn off this option will improve TREKKER new page creation speed."
     (when (get-buffer trekker-name)
       (kill-buffer trekker-name))
     (message "[TREKKER] Process terminated.")))
+
+(defun trekker--generate-id ()
+  "Randomly generate a seven digit id used for TREKKER buffers."
+  (format "%04x-%04x-%04x-%04x-%04x-%04x-%04x"
+          (random (expt 16 4))
+          (random (expt 16 4))
+          (random (expt 16 4))
+          (random (expt 16 4))
+          (random (expt 16 4))
+          (random (expt 16 4))
+          (random (expt 16 4))))
 
 (define-derived-mode trekker-mode fundamental-mode "TREKKER"
   "Major mode for Emacs Application Framework buffers.
@@ -339,8 +366,210 @@ manually. See `trekker-bind-key' for customization of app bindings."
   (add-hook 'kill-buffer-hook #'trekker--monitor-buffer-kill nil t)
   (add-hook 'kill-emacs-hook #'trekker--monitor-emacs-kill))
 
+(defun trekker--called-from-wsl-on-windows-p ()
+  "Check whether trekker is called by Emacs on WSL and is running on Windows."
+  (and (eq system-type 'gnu/linux)
+       (string-match-p ".exe" trekker-python-command)))
+
+(defun trekker-get-emacs-xid (frame)
+  "Get Emacs FRAME xid."
+  (if (trekker--called-from-wsl-on-windows-p)
+      (trekker-call-sync "get_emacs_wsl_window_id")
+    (frame-parameter frame 'window-id)))
+
+(defun trekker-get-window-allocation (&optional window)
+  "Get WINDOW allocation."
+  (let* ((window-edges (window-pixel-edges window))
+         (x (nth 0 window-edges))
+         (y (+ (nth 1 window-edges)
+               (if (version< emacs-version "27.0")
+                   (window-header-line-height window)
+                 (window-tab-line-height window))))
+         (w (- (nth 2 window-edges) x))
+         (h (- (nth 3 window-edges) (window-mode-line-height window) y)))
+    (list x y w h)))
+
+(defun trekker-emacs-running-in-wayland-native ()
+  (eq window-system 'pgtk))
+
+(defun trekker--get-titlebar-height ()
+  "We need fetch height of window titlebar to adjust y coordinate of TREKKER when Emacs is not fullscreen."
+  (cond ((trekker-emacs-running-in-wayland-native)
+         (let ((is-fullscreen-p (memq (frame-parameter nil 'fullscreen) '(fullscreen fullboth))))
+           (if is-fullscreen-p
+               0
+             ;; `32' is titlebar of Gnome3, we need change this value in other environment.
+             (cond ((trekker--on-hyprland-p)
+                    0)
+                   ((trekker--on-sway-p)
+                    (string-to-number (shell-command-to-string
+                                       (format "swaymsg -t get_tree | jq -r '..|try select(.pid == %d).deco_rect|.height'" (emacs-pid)))))
+                   (t
+                    32)))))
+        (t
+         0)))
+
+(defun trekker--on-sway-p ()
+  (string-equal (getenv "XDG_SESSION_DESKTOP") "sway"))
+
+(defun trekker--on-hyprland-p ()
+  (string-equal (getenv "XDG_CURRENT_DESKTOP") "Hyprland"))
+
+(defun trekker--split-number (string)
+  (mapcar #'string-to-number (split-string string)))
+
+(defun trekker--get-frame-coordinate ()
+  "We need fetch Emacs coordinate to adjust coordinate of TREKKER if it running on system not support cross-process reparent technology.
+
+Such as, wayland native, macOS etc."
+  (if (trekker-emacs-running-in-wayland-native)
+      (cond ((trekker--on-sway-p)
+             (trekker--split-number (shell-command-to-string
+				                     (format "swaymsg -t get_tree | jq -r '..|try select(.pid == %d).deco_rect|.x,.y'" (emacs-pid)))))
+            ((trekker--on-hyprland-p)
+             (let ((clients (json-parse-string (shell-command-to-string "hyprctl -j clients")))
+		           (coordinate))
+               (dotimes (i (length clients))
+		         (when (equal (gethash "pid" (aref clients i)) (emacs-pid))
+		           (setq coordinate (gethash "at" (aref clients i)))))
+               (list (aref coordinate 0) (aref coordinate 1))))
+            (t
+             (require 'dbus)
+             (let* ((coordinate (trekker--split-number
+				                 (dbus-call-method :session "org.gnome.Shell" "/org/trekker/wayland" "org.trekker.wayland" "get_emacs_window_coordinate" :timeout 1000)
+				                 ","))
+                    ;; HiDPI need except by `frame-scale-factor'.
+                    (frame-x (truncate (/ (car coordinate) (frame-scale-factor))))
+                    (frame-y (truncate (/ (cadr coordinate) (frame-scale-factor)))))
+               (list frame-x frame-y))))
+    (list 0 0)))
+
+(defun trekker--frame-top (frame)
+  "Return outer top position."
+  (let ((top (frame-parameter frame 'top)))
+    (if (listp top) (nth 1 top) top)))
+
+(defun trekker--frame-left (frame)
+  "Return outer left position"
+  (let ((left (frame-parameter frame 'left)))
+    (if (listp left) (nth 1 left) left)))
+
+(defun trekker--frame-internal-height (frame)
+  "Height of internal objects.
+Including title-bar, menu-bar, offset depends on window system, and border."
+  (let ((geometry (frame-geometry frame)))
+    (+ (cdr (alist-get 'title-bar-size geometry))
+       (cdr (alist-get 'tool-bar-size geometry)))))
+
+(defun trekker--buffer-x-position-adjust (frame)
+  "Adjust the x position of TREKKER buffers for macOS"
+  (if (eq system-type 'darwin)
+      (trekker--frame-left frame)
+    0))
+
+(defun trekker--buffer-y-position-adjust (frame)
+  "Adjust the y position of TREKKER buffers for macOS"
+  (if (eq system-type 'darwin)
+      (+ (trekker--frame-top frame) (trekker--frame-internal-height frame))
+    0))
+
+(defun trekker-monitor-configuration-change (&rest _)
+  "TREKKER function to respond when detecting a window configuration change."
+  (when (and trekker--monitor-configuration-p
+             (trekker-epc-live-p trekker-epc-process)
+             ;; When current frame is same with `emacs-frame'.
+             (equal (window-frame) emacs-frame))
+    (ignore-errors
+      (let (view-infos)
+        (dolist (frame (frame-list))
+          (dolist (window (window-list frame))
+            (with-current-buffer (window-buffer window)
+              (when (derived-mode-p 'trekker-mode)
+                ;; When `trekker-fullscreen-p' is non-nil, and only the TREKKER window is present, use frame size
+                (if (and trekker-fullscreen-p
+                         (equal (length (cl-remove-if #'window-dedicated-p (window-list frame))) 1))
+                    (push (format "%s:%s:%s:%s:%s:%s"
+                                  trekker--buffer-id
+                                  (trekker-get-emacs-xid frame)
+                                  0 0 (frame-pixel-width frame) (frame-pixel-height frame))
+                          view-infos)
+                  (let* ((window-allocation (trekker-get-window-allocation window))
+                         (window-divider-right-padding (if window-divider-mode window-divider-default-right-width 0))
+                         (window-divider-bottom-padding (if window-divider-mode window-divider-default-bottom-width 0))
+                         (titlebar-height (trekker--get-titlebar-height))
+                         (frame-coordinate (trekker--get-frame-coordinate))
+                         (frame-x (car frame-coordinate))
+                         (frame-y (cadr frame-coordinate))
+                         (x (+ (trekker--buffer-x-position-adjust frame) (nth 0 window-allocation)))
+                         (y (+ (trekker--buffer-y-position-adjust frame) (nth 1 window-allocation)))
+                         (w (nth 2 window-allocation))
+                         (h (nth 3 window-allocation)))
+                    (push (format "%s:%s:%s:%s:%s:%s"
+                                  trekker--buffer-id
+                                  (trekker-get-emacs-xid frame)
+                                  (+ x frame-x)
+                                  (+ y titlebar-height frame-y)
+                                  (- w window-divider-right-padding)
+                                  (- h window-divider-bottom-padding))
+                          view-infos)))))))
+        (trekker-call-async "update_views" (mapconcat #'identity view-infos ","))))))
+
+(defun trekker-monitor-window-size-change (frame)
+  "Delay some time and run `trekker-try-adjust-view-with-frame-size' to compare with Emacs FRAME size."
+  (when (trekker-epc-live-p trekker-epc-process)
+    (setq trekker-last-frame-width (frame-pixel-width frame))
+    (setq trekker-last-frame-height (frame-pixel-height frame))
+    (run-with-timer 1 nil (lambda () (trekker-try-adjust-view-with-frame-size frame)))))
+
+(defun trekker-try-adjust-view-with-frame-size (frame)
+  "Update TREKKER view once Emacs window size of the FRAME is changed."
+  (unless (and (equal (frame-pixel-width frame) trekker-last-frame-width)
+               (equal (frame-pixel-height frame) trekker-last-frame-height))
+    (trekker-monitor-configuration-change)))
+
+(defun trekker--get-trekker-buffers ()
+  "A function that return a list of TREKKER buffers."
+  (cl-remove-if-not
+   (lambda (buffer)
+     (with-current-buffer buffer
+       (derived-mode-p 'trekker-mode)))
+   (buffer-list)))
+
+(defmacro trekker-for-each-trekker-buffer (&rest body)
+  "A syntactic sugar to loop through each TREKKER buffer and evaluat BODY.
+
+Within BODY, `buffer' can be used to"
+  `(dolist (buffer (trekker--get-trekker-buffers))
+     (with-current-buffer buffer
+       ,@body)))
+
+(defun trekker-get-buffer (url)
+  "Find the buffer given the url."
+  (catch 'found-trekker
+    (trekker-for-each-trekker-buffer
+     (when (string= trekker--buffer-url url)
+       (throw 'found-trekker buffer))
+     nil)))
+
 (defun trekker-open-url (url)
   (interactive "MOpen URL: ")
+  (let* ((buf (trekker-get-buffer url)))
+    (unless buf
+      (setq buf (generate-new-buffer url))
+      (with-current-buffer buf
+        (trekker-mode)
+
+        (setq-local confirm-kill-processes nil)
+
+        (set (make-local-variable 'trekker--buffer-url) url)
+
+        (setq mode-name "Trekker")
+        ))
+    (add-hook 'window-size-change-functions #'trekker-monitor-window-size-change)
+    (add-hook 'window-configuration-change-hook #'trekker-monitor-configuration-change)
+
+    (switch-to-buffer buf))
+
   (message "Open url %s" url))
 
 (provide 'trekker)

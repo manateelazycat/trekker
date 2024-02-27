@@ -22,9 +22,8 @@ import queue
 import threading
 import traceback
 import sys
-from pathlib import Path
 from epc.server import ThreadingEPCServer
-from utils import (init_epc_client, eval_in_emacs, logger, close_epc_client)
+from utils import (init_epc_client, eval_in_emacs, logger, close_epc_client, PostGui)
 
 class Trekker:
     def __init__(self, args):
@@ -68,6 +67,10 @@ class Trekker:
                 self.event_queue.task_done()
         except:
             logger.error(traceback.format_exc())
+
+    @PostGui()
+    def kill_buffer(self, buffer_id):
+        pass
 
     def cleanup(self):
         """Do some cleanup before exit python process."""

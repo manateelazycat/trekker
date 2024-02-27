@@ -1,18 +1,18 @@
-;;; trekker.el --- LSP bridge  -*- lexical-binding: t -*-
+;;; trekker.el --- Trekker  -*- lexical-binding: t -*-
 
 ;; Filename: trekker.el
-;; Description: LSP bridge
+;; Description: Trekker
 ;; Author: Andy Stewart <lazycat.manatee@gmail.com>
 ;; Maintainer: Andy Stewart <lazycat.manatee@gmail.com>
-;; Copyright (C) 2018, Andy Stewart, all rights reserved.
-;; Created: 2018-06-15 14:10:12
-;; Version: 0.5
-;; Last-Updated: 2023-08-12 21:08:48
+;; Copyright (C) 2023, Andy Stewart, all rights reserved.
+;; Created: 2023-02-26 14:00
+;; Version: 0.1
+;; Last-Updated: 2023-02-27 09:36
 ;;           By: Andy Stewart
 ;; URL: https://github.com/manateelazycat/trekker
 ;; Keywords:
 ;; Compatibility: emacs-version >= 28
-;; Package-Requires: ((emacs "28") (posframe "1.1.7") (markdown-mode "2.6"))
+;; Package-Requires: ((emacs "28")
 ;;
 ;; Features that might be required by this library:
 ;;

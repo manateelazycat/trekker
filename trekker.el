@@ -563,6 +563,8 @@ Within BODY, `buffer' can be used to"
       (with-current-buffer buf
         (trekker-mode)
 
+        (trekker-call-async "create_buffer" trekker--buffer-id url)
+
         (setq-local confirm-kill-processes nil)
 
         (set (make-local-variable 'trekker--buffer-url) url)

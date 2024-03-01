@@ -22,6 +22,7 @@ import queue
 import threading
 import traceback
 import sys
+from browser import Browser
 from epc.server import ThreadingEPCServer
 from utils import (init_epc_client, eval_in_emacs, logger, close_epc_client)
 
@@ -41,6 +42,8 @@ class Trekker:
         # ch.setLevel(logging.DEBUG)
         # self.server.logger.addHandler(ch)
         # self.server.logger = logger
+
+        self.browser_dict = {}
 
         self.server.register_instance(self)  # register instance functions let elisp side call
 
@@ -67,6 +70,9 @@ class Trekker:
                 self.event_queue.task_done()
         except:
             logger.error(traceback.format_exc())
+
+    def create_buffer(self, buffer_id, url):
+        self.browser_dict[buffer_id] = Browser(buffer_id, url)
 
     def kill_buffer(self, buffer_id):
         pass

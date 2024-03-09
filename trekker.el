@@ -250,9 +250,7 @@ Then Trekker will start by gdb, please send new issue with `*trekker*' buffer co
                                  trekker-first-call-args)
       (setq trekker-first-call-method nil)
       (setq trekker-first-call-args nil)
-      ))
-
-  (message "*******"))
+      )))
 
 (defun trekker-enable ()
   (add-hook 'post-command-hook #'trekker-start-process))

@@ -232,6 +232,8 @@ Then Trekker will start by gdb, please send new issue with `*trekker*' buffer co
 
 (defun trekker--first-start (trekker-epc-port)
   "Call `trekker--open-internal' upon receiving `start_finish' signal from server."
+  (setq trekker-emacs-frame (window-frame))
+
   ;; Make EPC process.
   (setq trekker-epc-process (make-trekker-epc-manager
                              :server-process trekker-internal-process
@@ -479,8 +481,8 @@ Including title-bar, menu-bar, offset depends on window system, and border."
   "TREKKER function to respond when detecting a window configuration change."
   (when (and trekker--monitor-configuration-p
              (trekker-epc-live-p trekker-epc-process)
-             ;; When current frame is same with `emacs-frame'.
-             (equal (window-frame) emacs-frame))
+             ;; When current frame is same with `trekker-emacs-frame'.
+             (equal (window-frame) trekker-emacs-frame))
     (ignore-errors
       (let (view-infos)
         (dolist (frame (frame-list))

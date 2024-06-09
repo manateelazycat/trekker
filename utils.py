@@ -19,17 +19,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import functools
-from typing import Optional
-from urllib.parse import urlparse
-
-import sexpdata
 import logging
 import pathlib
 import platform
 import sys
+from typing import Optional
+from urllib.parse import urlparse
 
-from PyQt6.QtCore import QObject, pyqtSignal
+import sexpdata
 from epc.client import EPCClient
+from PyQt6.QtCore import QObject, pyqtSignal
 
 try:
     import orjson as json_parser
@@ -61,7 +60,7 @@ def close_epc_client():
 
 
 def handle_arg_types(arg):
-    if type(arg) is str and arg.startswith("'"):
+    if isinstance(arg, str) and arg.startswith("'"):
         arg = sexpdata.Symbol(arg.partition("'")[2])
 
     return sexpdata.Quoted(arg)

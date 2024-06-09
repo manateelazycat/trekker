@@ -182,10 +182,14 @@ Then Trekker will start by gdb, please send new issue with `*trekker*' buffer co
     (trekker--start-epc-server)
     (let* ((trekker-args (append
                           (list trekker-python-file)
+                          (trekker-get-render-size)
                           (list (number-to-string trekker-server-port))
                           (when trekker-enable-profile
-                            (list "profile"))
-                          )))
+                            (list "profile"))))
+           environments)
+
+      ;; Folow system DPI.
+      (setq environments (trekker--build-process-environment))
 
       ;; Set process arguments.
       (if trekker-enable-debug
@@ -554,6 +558,54 @@ Within BODY, `buffer' can be used to"
      (when (string= trekker--buffer-url url)
        (throw 'found-trekker buffer))
      nil)))
+
+(defun trekker-get-render-size ()
+  "Get allocation for render application in backend.
+We need calcuate render allocation to make sure no black border around render content."
+  (let* (;; We use `window-inside-pixel-edges' and `window-absolute-pixel-edges' calcuate height of window header, such as tabbar.
+         (window-header-height (- (nth 1 (window-inside-pixel-edges)) (nth 1 (window-absolute-pixel-edges))))
+         (width (frame-pixel-width))
+         ;; Render height should minus mode-line height, minibuffer height, header height.
+         (height (- (frame-pixel-height) (window-mode-line-height) (window-pixel-height (minibuffer-window)) window-header-height)))
+    (mapcar (lambda (x) (format "%s" x)) (list width height))))
+
+(defun trekker--build-process-environment ()
+  ;; Turn on DEBUG info when `trekker-enable-debug' is non-nil.
+  (let ((environments (seq-filter
+                       (lambda (var)
+                         (and (not (string-match-p "QT_SCALE_FACTOR" var))
+                              (not (string-match-p "QT_SCREEN_SCALE_FACTOR" var))))
+                       process-environment)))
+    (when trekker-enable-debug
+      (add-to-list 'environments "QT_DEBUG_PLUGINS=1" t))
+
+    (unless (eq system-type 'darwin)
+      (add-to-list 'environments
+                   (cond
+                    ((trekker-emacs-running-in-wayland-native)
+                     ;; Wayland native need to set QT_AUTO_SCREEN_SCALE_FACTOR=1
+                     ;; otherwise Qt window only have half of screen.
+                     "QT_AUTO_SCREEN_SCALE_FACTOR=1")
+                    (t
+                     ;; XWayland need to set QT_AUTO_SCREEN_SCALE_FACTOR=0
+                     ;; otherwise Qt which explicitly force high DPI enabling get scaled TWICE.
+                     "QT_AUTO_SCREEN_SCALE_FACTOR=0"))
+                   t)
+
+      (add-to-list 'environments "QT_FONT_DPI=96" t)
+
+      ;; Make sure Trekker application scale support 4k screen.
+      (add-to-list 'environments "QT_SCALE_FACTOR=1" t)
+
+      ;; Fix CORS problem.
+      (add-to-list 'environments "QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security" t)
+
+      ;; Use XCB for input event transfer.
+      ;; Only enable this option on Linux platform.
+      (when (and (eq system-type 'gnu/linux)
+                 (not (trekker-emacs-running-in-wayland-native)))
+        (add-to-list 'environments "QT_QPA_PLATFORM=xcb" t)))
+    environments))
 
 (defun trekker-open-url (url)
   (interactive "MOpen URL: ")

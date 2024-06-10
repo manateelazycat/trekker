@@ -19,22 +19,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import queue
+# NOTE
+# QtWebEngine will throw error "ImportError: QtWebEngineWidgets must be imported before a QCoreApplication instance is created"
+# So we import browser module before start Qt application instance to avoid this error, but we never use this module.
+from PyQt6 import QtWebEngineWidgets as NeverUsed # noqa
+
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QGraphicsScene
+from PyQt6 import QtCore
+from PyQt6.QtCore import QEventLoop
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QWidget
+
 import threading
 import traceback
 import sys
 import json
 import abc
 
-from core.utils import *
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QGraphicsScene
-
-from utils import parse_json_content
-
-webengine_profile = QWebEngineProfile('trekker')
-webengine_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
-webengine_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
+from utils import *
 
 class Browser(object):
     def __init__(self, args):
@@ -43,16 +48,12 @@ class Browser(object):
         self.buffer_id = buffer_id
         self.url = url
 
-        self.event_queue = queue.Queue()
-        self.event_loop = threading.Thread(target=self.event_dispatcher)
-        self.event_loop.start()
-
         self.communication_thread = threading.Thread(target=self.communicate_with_main_process)
         self.communication_thread.start()
 
         self.eval_in_emacs("message", "hello from trekker subprocess")
 
-        self.event_loop.join()
+        # self.event_loop.join()
 
     def communicate_with_main_process(self):
         while True:
@@ -60,15 +61,6 @@ class Browser(object):
                 data = sys.stdin.readline().strip()
                 message = parse_json_content(data)
                 self.print_log("Got message: {}".format(message))
-            except:
-                self.print_log(traceback.format_exc())
-
-    def event_dispatcher(self):
-        while True:
-            try:
-                message = self.event_queue.get(True)
-                self.print_log("**** ", message)
-                self.event_queue.task_done()
             except:
                 self.print_log(traceback.format_exc())
 
@@ -175,4 +167,17 @@ class BrowserPage(QWebEnginePage):
             print("[JavaScript console]: " + message)
 
 if __name__ == "__main__":
+    import sys
+    import signal
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("Trekker")
+
+    webengine_profile = QWebEngineProfile('trekker')
+    webengine_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+    webengine_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
+
     Browser(sys.argv[1:])
+
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    sys.exit(app.exec())

@@ -81,13 +81,13 @@ class Trekker:
         self.event_loop.join()
 
     def event_dispatcher(self):
-        try:
-            while True:
+        while True:
+            try:
                 message = self.event_queue.get(True)
                 print("**** ", message)
                 self.event_queue.task_done()
-        except:
-            logger.error(traceback.format_exc())
+            except:
+                logger.error(traceback.format_exc())
 
     def create_buffer(self, buffer_id, url):
         if buffer_id not in self.browser_subprocess_dict:
@@ -105,17 +105,22 @@ class Trekker:
 
     def browser_subprocess_message_handler(self, buffer_id):
         while True:
-            output = parse_json_content(self.browser_subprocess_dict[buffer_id].stdout.readline().strip())
-            if "type" in output:
-                if output["type"] == "log":
-                    print("[{}] {}: {}".format(output["buffer_id"], datetime.datetime.now().time(), output["content"]))
-                elif output["type"] == "message":
-                    message_emacs(output["content"])
-                elif output["type"] == "eval_in_emacs":
-                    content = output["content"]
-                    method_name = content["method_name"]
-                    args = content["args"]
-                    eval_in_emacs(method_name, *args)
+            try:
+                output = self.browser_subprocess_dict[buffer_id].stdout.readline().strip()
+                message = parse_json_content(output)
+                if "type" in message:
+                    if message["type"] == "log":
+                        print("[{}] {}: {}".format(message["buffer_id"], datetime.datetime.now().time(), message["content"]))
+                    elif message["type"] == "message":
+                        message_emacs(message["content"])
+                    elif message["type"] == "eval_in_emacs":
+                        content = message["content"]
+                        method_name = content["method_name"]
+                        args = content["args"]
+                        eval_in_emacs(method_name, *args)
+            except:
+                print(traceback.format_exc())
+
 
     def send_message_to_subprocess(self, buffer_id, message):
         if buffer_id in self.browser_subprocess_dict:

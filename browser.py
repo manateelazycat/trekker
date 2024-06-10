@@ -24,8 +24,17 @@ import threading
 import traceback
 import sys
 import json
+import abc
+
+from core.utils import *
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QGraphicsScene
 
 from utils import parse_json_content
+
+webengine_profile = QWebEngineProfile('trekker')
+webengine_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+webengine_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
 
 class Browser(object):
     def __init__(self, args):
@@ -83,6 +92,87 @@ class Browser(object):
             "args": list(args)
         }
         self.send_message_to_main_process("eval_in_emacs", message)
+
+class BrowserBuffer(QGraphicsScene):
+    __metaclass__ = abc.ABCMeta
+
+    aspect_ratio_change = pyqtSignal()
+    enter_fullscreen_request = pyqtSignal()
+    exit_fullscreen_request = pyqtSignal()
+
+    def __init__(self, buffer_id, url):
+        super(QGraphicsScene, self).__init__()
+
+        self.buffer_id = buffer_id
+        self.url = url
+
+        self.profile = webengine_profile
+
+class BrowserView(QWidget):
+
+    def __init__(self, buffer, view_info):
+        super(View, self).__init__()
+
+        self.buffer = buffer
+
+
+class BrowserWidget(QWebEngineView):
+
+    translate_selected_text = QtCore.pyqtSignal(str)
+
+    def __init__(self, profile, buffer_id):
+        super(QWebEngineView, self).__init__(profile)
+
+        self.installEventFilter(self)
+        self.buffer_id = buffer_id
+        self.is_button_press = False
+
+        self.web_page = BrowserPage(profile)
+        self.setPage(self.web_page)
+
+class BrowserPage(QWebEnginePage):
+    def __init__(self, profile):
+        QWebEnginePage.__init__(self, profile)
+
+    def execute_javascript(self, script_src):
+        ''' Execute JavaScript.'''
+        try:
+            if hasattr(self, "loop") and self.loop.isRunning():
+                # NOTE:
+                #
+                # Just return None is QEventLoop is busy, such as press 'j' key not release on webpage.
+                # Otherwise will got error 'RecursionError: maximum recursion depth exceeded while calling a Python object'.
+                #
+                # And don't warry, API 'execute_javascript' is works well for programming purpse since we just call this interface occasionally.
+                return None
+            else:
+                # Build event loop.
+                self.loop = QEventLoop()
+
+                # Run JavaScript code.
+                self.runJavaScript(script_src, self.callback_js)
+
+                # Execute event loop, and wait event loop quit.
+                self.loop.exec()
+
+                # Return JavaScript function result.
+                return self.result
+        except:
+            import traceback
+            traceback.print_exc()
+
+            return None
+
+    def callback_js(self, result):
+        ''' Callback of JavaScript, call loop.quit to jump code after loop.exec.'''
+        self.result = result
+        self.loop.quit()
+
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        # Only print JavaScript console message for EAF application.
+        # don't print any console message from browser, print too much message will slow down Emacs.
+        if self.url().toString() == "file:///":
+            print("[JavaScript console]: " + message)
 
 if __name__ == "__main__":
     Browser(sys.argv[1:])

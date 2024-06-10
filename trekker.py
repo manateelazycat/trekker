@@ -25,6 +25,7 @@ import traceback
 import subprocess
 import os
 import datetime
+import json
 
 from epc.server import ThreadingEPCServer
 from utils import *
@@ -44,8 +45,8 @@ class Trekker:
         self.buffer_dict = {}
         self.view_dict = {}
 
-        self.browser_dict = {}
-        self.browser_message_threads = {}
+        self.browser_subprocess_dict = {}
+        self.browser_subprocess_communication_threads = {}
 
         # Init EPC client port.
         init_epc_client(int(emacs_server_port))
@@ -89,22 +90,22 @@ class Trekker:
             logger.error(traceback.format_exc())
 
     def create_buffer(self, buffer_id, url):
-        if buffer_id not in self.browser_dict:
+        if buffer_id not in self.browser_subprocess_dict:
             browser_subprocess = subprocess.Popen(
                 ["python3", os.path.join(os.path.dirname(__file__), "browser.py"), str(buffer_id), str(url)],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE)
 
-            self.browser_dict[buffer_id] = browser_subprocess
+            self.browser_subprocess_dict[buffer_id] = browser_subprocess
 
-            communication_thread = threading.Thread(target=self.browser_process_message_handler, args=(buffer_id,))
-            self.browser_message_threads[buffer_id] = communication_thread
-            communication_thread.start()
+            browser_subprocess_communication_thread = threading.Thread(target=self.browser_subprocess_message_handler, args=(buffer_id,))
+            self.browser_subprocess_communication_threads[buffer_id] = browser_subprocess_communication_thread
+            browser_subprocess_communication_thread.start()
 
-    def browser_process_message_handler(self, buffer_id):
+    def browser_subprocess_message_handler(self, buffer_id):
         while True:
-            output = parse_json_content(self.browser_dict[buffer_id].stdout.readline().strip())
+            output = parse_json_content(self.browser_subprocess_dict[buffer_id].stdout.readline().strip())
             if "type" in output:
                 if output["type"] == "log":
                     print("[{}] {}: {}".format(output["buffer_id"], datetime.datetime.now().time(), output["content"]))
@@ -115,6 +116,12 @@ class Trekker:
                     method_name = content["method_name"]
                     args = content["args"]
                     eval_in_emacs(method_name, *args)
+
+    def send_message_to_subprocess(self, buffer_id, message):
+        if buffer_id in self.browser_subprocess_dict:
+            # Note: need add b'\n' at end, otherwise subprocess will block at sys.stdin.readline()
+            self.browser_subprocess_dict[buffer_id].stdin.write(json.dumps(message).encode("utf-8") + b'\n')
+            self.browser_subprocess_dict[buffer_id].stdin.flush()
 
     def kill_buffer(self, buffer_id):
         pass

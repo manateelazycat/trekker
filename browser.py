@@ -25,6 +25,8 @@ import traceback
 import sys
 import json
 
+from utils import parse_json_content
+
 class Browser(object):
     def __init__(self, args):
         (buffer_id, url) = args
@@ -36,16 +38,30 @@ class Browser(object):
         self.event_loop = threading.Thread(target=self.event_dispatcher)
         self.event_loop.start()
 
+        self.communication_thread = threading.Thread(target=self.communicate_with_main_process)
+        self.communication_thread.start()
+
+        self.eval_in_emacs("message", "hello from trekker subprocess")
+
         self.event_loop.join()
 
+    def communicate_with_main_process(self):
+        while True:
+            try:
+                data = sys.stdin.readline().strip()
+                message = parse_json_content(data)
+                self.print_log("Got message: {}".format(message))
+            except:
+                self.print_log(traceback.format_exc())
+
     def event_dispatcher(self):
-        try:
-            while True:
+        while True:
+            try:
                 message = self.event_queue.get(True)
                 self.print_log("**** ", message)
                 self.event_queue.task_done()
-        except:
-            self.print_log(traceback.format_exc())
+            except:
+                self.print_log(traceback.format_exc())
 
     def send_message_to_main_process(self, message_type, message):
         print(json.dumps({

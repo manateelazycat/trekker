@@ -89,7 +89,6 @@ class Trekker:
             logger.error(traceback.format_exc())
 
     def create_buffer(self, buffer_id, url):
-        print("!!!!!! ", buffer_id, url, self.browser_dict)
         if buffer_id not in self.browser_dict:
             browser_subprocess = subprocess.Popen(
                 ["python3", os.path.join(os.path.dirname(__file__), "browser.py"), str(buffer_id), str(url)],
@@ -111,6 +110,11 @@ class Trekker:
                     print("[{}] {}: {}".format(output["buffer_id"], datetime.datetime.now().time(), output["content"]))
                 elif output["type"] == "message":
                     message_emacs(output["content"])
+                elif output["type"] == "eval_in_emacs":
+                    content = output["content"]
+                    method_name = content["method_name"]
+                    args = content["args"]
+                    eval_in_emacs(method_name, *args)
 
     def kill_buffer(self, buffer_id):
         pass

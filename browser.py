@@ -36,8 +36,6 @@ class Browser(object):
         self.event_loop = threading.Thread(target=self.event_dispatcher)
         self.event_loop.start()
 
-        self.print_log("***** {} {}".format(buffer_id, url))
-
         self.event_loop.join()
 
     def event_dispatcher(self):
@@ -62,6 +60,13 @@ class Browser(object):
 
     def message_emacs(self, message):
         self.send_message_to_main_process("message", message)
+
+    def eval_in_emacs(self, method_name, *args):
+        message = {
+            "method_name": method_name,
+            "args": list(args)
+        }
+        self.send_message_to_main_process("eval_in_emacs", message)
 
 if __name__ == "__main__":
     Browser(sys.argv[1:])

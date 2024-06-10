@@ -19,9 +19,34 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import queue
+import threading
+import traceback
+import sys
+
 class Browser(object):
-    def __init__(self, buffer_id, url):
+    def __init__(self, args):
+        (buffer_id, url) = args
+
         self.buffer_id = buffer_id
         self.url = url
 
+        self.event_queue = queue.Queue()
+        self.event_loop = threading.Thread(target=self.event_dispatcher)
+        self.event_loop.start()
+
         print("***** ", buffer_id, url)
+
+        self.event_loop.join()
+
+    def event_dispatcher(self):
+        try:
+            while True:
+                message = self.event_queue.get(True)
+                print("**** ", message)
+                self.event_queue.task_done()
+        except:
+            print(traceback.format_exc())
+
+if __name__ == "__main__":
+    Browser(sys.argv[1:])

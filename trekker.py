@@ -22,10 +22,10 @@ import queue
 import sys
 import threading
 import traceback
+import subprocess
+import os
 
 from epc.server import ThreadingEPCServer
-
-from browser import Browser
 from utils import *
 
 
@@ -42,6 +42,7 @@ class Trekker:
         self.views_data = None
         self.buffer_dict = {}
         self.view_dict = {}
+        self.browser_dict = {}
 
         # Init EPC client port.
         init_epc_client(int(emacs_server_port))
@@ -57,8 +58,6 @@ class Trekker:
         # ch.setLevel(logging.DEBUG)
         # self.server.logger.addHandler(ch)
         # self.server.logger = logger
-
-        self.browser_dict = {}
 
         self.server.register_instance(self)  # register instance functions let elisp side call
 
@@ -87,7 +86,16 @@ class Trekker:
             logger.error(traceback.format_exc())
 
     def create_buffer(self, buffer_id, url):
-        self.browser_dict[buffer_id] = Browser(buffer_id, url)
+        print("!!!!!! ", buffer_id, url, self.browser_dict)
+        if buffer_id not in self.browser_dict:
+            browser_subprocess = subprocess.Popen(
+                ["python3", os.path.join(os.path.dirname(__file__), "browser.py"), str(buffer_id), str(url)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            print("******* ", browser_subprocess)
+
+            self.browser_dict[buffer_id] = browser_subprocess
 
     def kill_buffer(self, buffer_id):
         pass

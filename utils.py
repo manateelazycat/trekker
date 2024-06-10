@@ -89,7 +89,7 @@ def epc_arg_transformer(arg):
     (list 1 2 3)               => [1 2 3]
     (list 1 2 (list 3 4))      => [1 2 [3 4]]
     """
-    if type(arg) != list:
+    if not isinstance(arg, list):
         return arg
 
     # NOTE: Empty list elisp can be treated as both empty python dict/list

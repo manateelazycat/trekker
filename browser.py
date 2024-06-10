@@ -23,6 +23,7 @@ import queue
 import threading
 import traceback
 import sys
+import json
 
 class Browser(object):
     def __init__(self, args):
@@ -35,7 +36,7 @@ class Browser(object):
         self.event_loop = threading.Thread(target=self.event_dispatcher)
         self.event_loop.start()
 
-        print("***** ", buffer_id, url)
+        self.print_log("***** {} {}".format(buffer_id, url))
 
         self.event_loop.join()
 
@@ -43,10 +44,24 @@ class Browser(object):
         try:
             while True:
                 message = self.event_queue.get(True)
-                print("**** ", message)
+                self.print_log("**** ", message)
                 self.event_queue.task_done()
         except:
-            print(traceback.format_exc())
+            self.print_log(traceback.format_exc())
+
+    def send_message_to_main_process(self, message_type, message):
+        print(json.dumps({
+            "buffer_id": self.buffer_id,
+            "type": message_type,
+            "content": message
+        }))
+        sys.stdout.flush()
+
+    def print_log(self, log):
+        self.send_message_to_main_process("log", log)
+
+    def message_emacs(self, message):
+        self.send_message_to_main_process("message", message)
 
 if __name__ == "__main__":
     Browser(sys.argv[1:])

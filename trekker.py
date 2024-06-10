@@ -24,6 +24,7 @@ import threading
 import traceback
 import subprocess
 import os
+import datetime
 
 from epc.server import ThreadingEPCServer
 from utils import *
@@ -42,7 +43,9 @@ class Trekker:
         self.views_data = None
         self.buffer_dict = {}
         self.view_dict = {}
+
         self.browser_dict = {}
+        self.browser_message_threads = {}
 
         # Init EPC client port.
         init_epc_client(int(emacs_server_port))
@@ -93,9 +96,21 @@ class Trekker:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE)
-            print("******* ", browser_subprocess)
 
             self.browser_dict[buffer_id] = browser_subprocess
+
+            communication_thread = threading.Thread(target=self.browser_process_message_handler, args=(buffer_id,))
+            self.browser_message_threads[buffer_id] = communication_thread
+            communication_thread.start()
+
+    def browser_process_message_handler(self, buffer_id):
+        while True:
+            output = parse_json_content(self.browser_dict[buffer_id].stdout.readline().strip())
+            if "type" in output:
+                if output["type"] == "log":
+                    print("[{}] {}: {}".format(output["buffer_id"], datetime.datetime.now().time(), output["content"]))
+                elif output["type"] == "message":
+                    message_emacs(output["content"])
 
     def kill_buffer(self, buffer_id):
         pass

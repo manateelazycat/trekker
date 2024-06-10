@@ -107,17 +107,18 @@ class Trekker:
         while True:
             try:
                 output = self.browser_subprocess_dict[buffer_id].stdout.readline().strip()
-                message = parse_json_content(output)
-                if "type" in message:
-                    if message["type"] == "log":
-                        print("[{}] {}: {}".format(message["buffer_id"], datetime.datetime.now().time(), message["content"]))
-                    elif message["type"] == "message":
-                        message_emacs(message["content"])
-                    elif message["type"] == "eval_in_emacs":
-                        content = message["content"]
-                        method_name = content["method_name"]
-                        args = content["args"]
-                        eval_in_emacs(method_name, *args)
+                if len(output) > 0:
+                    message = parse_json_content(output)
+                    if "type" in message:
+                        if message["type"] == "log":
+                            print("[{}] {}: {}".format(message["buffer_id"], datetime.datetime.now().time(), message["content"]))
+                        elif message["type"] == "message":
+                            message_emacs(message["content"])
+                        elif message["type"] == "eval_in_emacs":
+                            content = message["content"]
+                            method_name = content["method_name"]
+                            args = content["args"]
+                            eval_in_emacs(method_name, *args)
             except:
                 print(traceback.format_exc())
 

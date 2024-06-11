@@ -27,6 +27,7 @@ import subprocess
 import os
 import datetime
 import json
+import time
 
 from epc.server import ThreadingEPCServer
 from utils import *
@@ -48,6 +49,7 @@ class Trekker:
 
         self.browser_subprocess_dict = {}
         self.browser_subprocess_communication_threads = {}
+        self.browser_subprocess_exit_threads = {}
 
         # Init EPC client port.
         init_epc_client(int(emacs_server_port))
@@ -104,25 +106,54 @@ class Trekker:
             self.browser_subprocess_communication_threads[buffer_id] = browser_subprocess_communication_thread
             browser_subprocess_communication_thread.start()
 
+            browser_subprocess_exit_thread = threading.Thread(target=self.browser_subprocess_exit_handler, args=(buffer_id,))
+            self.browser_subprocess_exit_threads[buffer_id] = browser_subprocess_exit_thread
+            browser_subprocess_exit_thread.start()
+
     def browser_subprocess_message_handler(self, buffer_id):
         while True:
             try:
-                output = self.browser_subprocess_dict[buffer_id].stdout.readline().strip()
-                if len(output) > 0:
-                    message = parse_json_content(output)
-                    if "type" in message:
-                        if message["type"] == "log":
-                            print("[{}] {}: {}".format(message["buffer_id"], datetime.datetime.now().time(), message["content"]))
-                        elif message["type"] == "message":
-                            message_emacs(message["content"])
-                        elif message["type"] == "eval_in_emacs":
-                            content = message["content"]
-                            method_name = content["method_name"]
-                            args = content["args"]
-                            eval_in_emacs(method_name, *args)
+                process = self.browser_subprocess_dict[buffer_id]
+                if process.poll() is None:
+                    output = process.stdout.readline().strip()
+                    if len(output) > 0:
+                        message = parse_json_content(output)
+                        if "type" in message:
+                            if message["type"] == "log":
+                                print("[{}] {}: {}".format(message["buffer_id"], datetime.datetime.now().time(), message["content"]))
+                            elif message["type"] == "message":
+                                message_emacs(message["content"])
+                            elif message["type"] == "eval_in_emacs":
+                                content = message["content"]
+                                method_name = content["method_name"]
+                                args = content["args"]
+                                eval_in_emacs(method_name, *args)
+                else:
+                    break
             except:
                 print(traceback.format_exc())
 
+    def browser_subprocess_exit_handler(self, buffer_id):
+        while True:
+            try:
+                process = self.browser_subprocess_dict[buffer_id]
+                return_code = process.poll()
+                if return_code is not None:
+                    stdout, stderr = process.communicate()
+
+                    output = stdout.decode('utf-8')
+                    error = stderr.decode('utf-8')
+
+                    print("*** Buffer subprocess {} exit".format(buffer_id))
+                    if output.strip() != "":
+                        print("OUTPUT:\n {}".format(output))
+                    if error.strip() != "":
+                        print("ERROR:\n {}".format(error))
+                    break
+
+                time.sleep(1)
+            except:
+                print(traceback.format_exc())
 
     def send_message_to_subprocess(self, buffer_id, message):
         if buffer_id in self.browser_subprocess_dict:

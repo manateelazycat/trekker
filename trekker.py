@@ -181,9 +181,12 @@ class Trekker:
             # such as QGraphicsVideoItem will report "Internal data stream error" error.
             for old_view_buffer_id in old_view_buffer_ids:
                 if old_view_buffer_id not in new_view_buffer_ids:
-                    if old_view_buffer_id in self.buffer_dict:
-                        # self.buffer_dict[old_view_buffer_id].all_views_hide()
-                        print("Hide all views of buffer id: {}".format(old_view_buffer_id))
+                    if old_view_buffer_id in self.browser_subprocess_dict:
+                        self.send_message_to_subprocess(old_view_buffer_id, {
+                            "buffer_id": old_view_buffer_id,
+                            "type": "func",
+                            "message": "all_views_hide"
+                        })
 
             # Remove old key from view dict and destroy old view.
             for key in list(self.view_dict):
@@ -215,9 +218,12 @@ class Trekker:
             if view_infos != ['']:
                 for new_view_buffer_id in new_view_buffer_ids:
                     if new_view_buffer_id not in old_view_buffer_ids:
-                        if new_view_buffer_id in self.buffer_dict:
-                            # self.buffer_dict[new_view_buffer_id].some_view_show()
-                            print("Call some_view_show of buffer id: {}".format(new_view_buffer_id))
+                        if new_view_buffer_id in self.browser_subprocess_dict:
+                            self.send_message_to_subprocess(new_view_buffer_id, {
+                                "buffer_id": new_view_buffer_id,
+                                "type": "func",
+                                "message": "some_view_show"
+                            })
 
             # Adjust buffer size along with views change.
             # Note: just buffer that option `fit_to_view' is False need to adjust,
